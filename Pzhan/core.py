@@ -53,20 +53,22 @@ class Pzhan(object):
         self.cookie = cl.LWPCookieJar()
         self.cookie_handler = ul2.HTTPCookieProcessor(self.cookie)
         self.opener = ul2.build_opener(self.cookie_handler)
+        try:
+            request = ul2.Request(self.login_url, self.post_data, self.login_header)
+            response = self.opener.open(request)
+            abc = response.getcode()
+        except Exception:
+            return False
 
-        request = ul2.Request(self.login_url, self.post_data, self.login_header)
-        response = self.opener.open(request)
-
-        abc = response.getcode()
         if abc == 200:
             log.info("Response %d: login succeed." % abc)
             self.pid = pid
             self.psw = psw
             self.logined = True
-            return 0
+            return True
         else:
             log.error("Response %d: login failed." % abc)
-            return 1
+            return False
 
     def set_save_path(self, save_path):
         self.save_path = save_path
