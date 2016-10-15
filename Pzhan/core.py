@@ -129,9 +129,11 @@ class Pzhan(object):
             log.info("Image %s saved." % file_path)
 
     def get_pg(self, pg_url, pfx=None):
-        if self.save_prefix == "S":
+        if pfx is None:
+          prefix = ""
+        elif self.save_prefix == "S":
             prefix = "%04d" % pfx
-        if self.save_path == "T":
+        elif self.save_path == "T":
             prefix = self.get_time()
 
         pg_html = self.get_html(pg_url)
@@ -163,6 +165,7 @@ class Pzhan(object):
             self.mkdir(save_path)
 
             for pic_url in pg_list:
+                log.info("Saving pic %d/%d" % (pg_list.index(pic_url)+1, len(pg_list)))
                 self.get_pic(pic_url, save_path)
 
     def get_member_works_urls(self, member_url):
