@@ -71,6 +71,16 @@ class Pzhan(object):
             return False
 
     def set_save_path(self, save_path):
+        has_path = os.path.exists(save_path)
+        if not has_path:
+            try:
+                is_mkdir = os.makedirs(save_path)
+            except OSError:
+                log.error("Could not create saving path.")
+            if not is_mkdir:
+                log.error("Could not create saving path.")
+            return
+        log.info("Saving path has set to %s" % save_path)
         self.save_path = save_path
 
     def get_html(self, url):
@@ -103,7 +113,7 @@ class Pzhan(object):
         log.debug("Save_img: response %d" % abc)
         if abc == 200:
             data = response.read()
-            with open(path, 'wb') as f:
+            with open(path, "wb") as f:
                 f.write(data)
             return True
         else:
@@ -132,7 +142,7 @@ class Pzhan(object):
 
     def get_pg(self, pg_url, pfx=None):
         if pfx is None:
-          prefix = ""
+            prefix = ""
         elif self.save_prefix == "S":
             prefix = "%04d" % pfx
         elif self.save_path == "T":
@@ -197,6 +207,7 @@ class Pzhan(object):
                 url_list.append(item_url)
 
             p += 1
+            url_list = url_list[::-1]
         log.info("Member \"%s\" has total %d works." % (member_name, len(url_list)))
 
         return url_list, member_name
@@ -209,10 +220,13 @@ class Pzhan(object):
         self.save_path += "/" + member_name
         self.mkdir(self.save_path)
 
-        works_list = works_list[::-1]
         for work_url in works_list:
             log.info("Getting work %d/%d" % (works_list.index(work_url)+1, len(works_list)))
-            self.get_pg(work_url)
+            try:
+                self.get_pg(work_url, (works_list.index(work_url)+1))
+            except Exception:
+                log.error("Work %d/%d fail." % (works_list.index(work_url)+1, len(works_list)))
+
 
         self.save_path = pre_path
         log.info("Works getting complete.")

@@ -1,6 +1,7 @@
 # Others
 test.py
 *~
+.PzhanConf
 .idea/
 
 # Byte-compiled / optimized / DLL files

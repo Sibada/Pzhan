@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from Pzhan import log
 from Pzhan.core import Pzhan
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
+import time
 import sys
+import os
+import logging
 
 
-class MainWindow(QDialog):
+class MainWindow(QMainWindow):
     def __init__(self, pzhan, parent=None):
         super(MainWindow, self).__init__(parent)
 
@@ -20,6 +24,8 @@ class MainWindow(QDialog):
         self.psw_le.setEchoMode(QLineEdit.Password)
         self.is_login = QLabel("Not login")
         self.login_btn = QPushButton("Login")
+        self.remem_psw = QCheckBox('Remember Password')
+        self.remem_psw.setChecked(True)
 
         self.save_path_le = QLineEdit("")
         self.save_path_btn = QPushButton("Set save path")
@@ -51,6 +57,7 @@ class MainWindow(QDialog):
         login_row = QHBoxLayout()
         login_row.addLayout(lb_c)
         login_row.addLayout(le_c)
+        login_row.addWidget(self.remem_psw)
         login_row.addStretch(1)
         login_row.addLayout(stu_c)
 
@@ -78,16 +85,42 @@ class MainWindow(QDialog):
         v_box.addWidget(self.console)
         v_box.addWidget(self.msg_tst)
 
-        self.setLayout(v_box)
-        self.resize(QSize(450,600))
+        # self.setLayout(v_box)
+        self.resize(QSize(600, 650))
         self.setWindowTitle("Pzhan")
 
         # self.setWindowFlags(Qt.WindowCloseButtonHint)
+        widget = QWidget(self)
+        widget.setLayout(v_box)
+        self.setCentralWidget(widget)
 
         self.show()
 
-        sys.stdout = EmittingStream(textWritten=self.normalOutputWritten)
-        sys.stderr = EmittingStream(textWritten=self.normalOutputWritten)
+        # Load configs.
+        if os.path.exists(".PzhanConf"):
+            conf = open(".PzhanConf", "r")
+            confs = conf.readlines()
+            conf.close()
+            if len(confs) > 0:
+                confs = confs[0].split(";")
+                print confs
+                if len(confs) > 0:
+                    self.save_path_le.setText(confs[0])
+                    self.pz.set_save_path(unicode(self.save_path_le.text()))
+                if len(confs) > 1:
+                    self.pid_le.setText(confs[1])
+                    self.psw_le.setText(confs[2])
+
+        sys.stdout = Emitting_stream(textWritten=self.output_writen)
+        sys.stderr = Emitting_stream(textWritten=self.output_writen)
+
+        qt_log = logging.StreamHandler(Emitting_stream(textWritten=self.output_writen))
+        qt_log.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s',
+                                                   datefmt='%Y-%m-%d %H:%M:%S'))
+        log.addHandler(qt_log)
+
+        # Set format.
+        QTextCodec.setCodecForCStrings(QTextCodec.codecForName("utf-8"))
 
         self.connect(self.login_btn, SIGNAL('clicked()'), self.login)
         self.connect(self.add_work_btn, SIGNAL('clicked()'), self.add_work)
@@ -96,13 +129,17 @@ class MainWindow(QDialog):
 
         self.connect(self.save_path_btn, SIGNAL("clicked()"), self.set_save_path)
 
-        self.connect(self.start_work_btn, SIGNAL("clicked()"), self.get_works)
+        self.connect(self.start_work_btn, SIGNAL("clicked()"), self.start_works)
+
+        # Circle lock
+        self.lock = QReadWriteLock()
+        self.get_cir = Thread(self.lock, self)
 
     def __del__(self):
         sys.stdout = sys.__stdout__
         sys.stderr = sys.__stderr__
 
-    def normalOutputWritten(self, text):
+    def output_writen(self, text):
         cursor = self.console.textCursor()
         cursor.movePosition(QTextCursor.End)
         cursor.insertText(text)
@@ -123,7 +160,11 @@ class MainWindow(QDialog):
         if self.new_work.text() == "":
             self.msg_tst.setText("Url could not be empty.")
             return
+
+        self.lock.lockForWrite()
         self.work_list.addItem(self.new_work.text())
+        self.lock.unlock()
+
         self.new_work.setText("")
 
     def delete_work(self):
@@ -131,30 +172,77 @@ class MainWindow(QDialog):
         item_to_del = None
 
     def set_save_path(self):
-        self.pz.set_save_path(self.save_path_le.text())
+        self.pz.set_save_path(unicode(self.save_path_le.text()))
 
-    def get_works(self):
+    def start_works(self):
         if not pz.logined:
             self.msg_tst.setText("Please login.")
             return
 
-        while self.work_list.count() > 0:
+        self.get_cir.start()
+
+    def closeEvent(self, event):
+        # Save configure information.
+        if self.pz.save_path is not None:
+            conf_txt = self.pz.save_path
+        else:
+            conf_txt = unicode(self.save_path_le.text())
+
+        if self.remem_psw.checkState():
+            if self.pz.pid is not None:
+                pid = self.pz.pid
+                psw = self.pz.psw
+            else:
+                pid = unicode(self.pid_le.text())
+                psw = unicode(self.psw_le.text())
+            conf_txt = conf_txt + ";" + pid + ";" + psw
+
+        conf = open(".PzhanConf", "w")
+        conf.write(conf_txt)
+        conf.close()
+        event.accept()
+
+    def getting_circle(self):
+        while True:
+            self.lock.lockForRead()
+            if self.work_list.count() <= 0:
+                break
             items = self.work_list.takeItem(0)
             url = unicode(items.text())
             items = None
+            self.lock.unlock()
 
-            print "Getting %s" % url
+            log.info("-> Getting %s" % url)
+
+            if url.find("illust_id") >= 0:
+                is_work = True
+            else:
+                is_work = False
+
             try:
-                pz.get_pg(url)
+                if is_work:
+                    pz.get_pg(url)
+                else:
+                    pz.get_member_works(url)
             except Exception:
                 print "Error getting %s" % url
 
-
-class EmittingStream(QObject):
+class Emitting_stream(QObject):
         textWritten = pyqtSignal(str)
 
         def write(self, text):
             self.textWritten.emit(str(text))
+
+
+class Thread(QThread):
+    def __init__(self, lock, mw, parent=None):
+        super(Thread, self).__init__(parent)
+        self.lock = lock
+        self.mw = mw
+
+    def run(self):
+        mw.getting_circle()
+        log.info("All works have done.")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
