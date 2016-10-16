@@ -5,8 +5,10 @@ from . import log
 import re
 import os
 import time
+import zipfile as zf
 import urllib as ul
 import urllib2 as ul2
+import requests as rq
 import cookielib as cl
 from bs4 import BeautifulSoup as bs
 
@@ -42,7 +44,7 @@ class Pzhan(object):
         self.save_path = "~"
         self.save_prefix = "N"  # N: None, T: Time, S: Series number.
 
-        self.pg_css = ["div.works_display", "a.multiple", "img.original-image"]
+        self.pg_css = ["div.works_display", "a.multiple", "img.original-image", "canvas"]
         self.title_css = ["div.layout-a", "h1.title"]
         self.pgsl_css = ["div.item-container", "a.full-size-container"]
 
@@ -155,9 +157,18 @@ class Pzhan(object):
         title = prefix + " " + title
         save_path = self.save_path + "/" + title
 
+        zip_inc_t = re.findall("pixiv.context.ugokuIllustFullscreenData\s*=\s*\{\"src\"\:\".+\.zip\"", pg_html)
         works_dis = pg_soup.select(self.pg_css[0])[0].select(self.pg_css[1])
 
-        if len(works_dis) == 0:
+        if len(zip_inc_t) > 0:
+            zip_inc = zip_inc_t[0]
+            zip_url = re.findall("http\:.*\.zip", zip_inc)[0]
+            zip_url = re.sub("\\\\", "", zip_url)
+
+            log.info("\"%s\" is a dynamic pic." % (title))
+            self.get_dpc(zip_url, save_path, pg_url)
+
+        elif len(works_dis) == 0:
             img_src = pg_soup.select(self.pg_css[2])[0].attrs["data-src"]
             ext = img_src.split(".")[-1]
             save_name = save_path + "." + ext
@@ -230,4 +241,45 @@ class Pzhan(object):
 
         self.save_path = pre_path
         log.info("Works getting complete.")
+
+    def get_dpc(self, zip_url, path, referer):
+        option_header = {
+        'User-Agent': self.User_Agent,
+        'Accept-Encoding': 'gzip, deflate',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Request-Headers': 'range'
+        }
+
+        get_header = {
+        'User-Agent': self.User_Agent,
+        'Referer': referer,
+        'Connection': 'keep-alive'
+        }
+
+        req = rq.options(zip_url, headers=option_header)
+        if not req.ok:
+            log.error("Getting zip fail.")
+            return False
+
+        request = ul2.Request(zip_url, headers=get_header)
+        response = self.opener.open(request)
+        abc = response.getcode()
+
+        if abc == 200:
+            zip_file = path + ".zip"
+            log.info("Downloading %s" % zip_file)
+            data = response.read()
+            with open(zip_file, "wb") as f:
+                f.write(data)
+
+            log.debug("Unziping %s..." % zip_file)
+            self.mkdir(path)
+            dpc_zip = zf.ZipFile(zip_file, "r")
+            for fn in dpc_zip.namelist():
+                file(path + "/" + fn, "wb").write(dpc_zip.read(fn))
+            os.remove(zip_file)
+            log.info("Flames of %s has all unzipped." % zip_file)
+            return True
+        else:
+            return False
 

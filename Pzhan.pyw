@@ -204,9 +204,9 @@ class MainWindow(QMainWindow):
 
     def getting_circle(self):
         while True:
-            self.lock.lockForRead()
             if self.work_list.count() <= 0:
                 break
+            self.lock.lockForWrite()
             items = self.work_list.takeItem(0)
             url = unicode(items.text())
             items = None
@@ -241,8 +241,10 @@ class Thread(QThread):
         self.mw = mw
 
     def run(self):
+        mw.msg_tst.setText("Getting works...")
         mw.getting_circle()
         log.info("All works have done.")
+        mw.msg_tst.setText("All works completed.")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
