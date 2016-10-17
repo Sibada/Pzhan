@@ -76,10 +76,8 @@ class Pzhan(object):
         has_path = os.path.exists(save_path)
         if not has_path:
             try:
-                is_mkdir = os.makedirs(save_path)
+                os.makedirs(save_path)
             except OSError:
-                log.error("Could not create saving path.")
-            if not is_mkdir:
                 log.error("Could not create saving path.")
             return
         log.info("Saving path has set to %s" % save_path)
@@ -243,43 +241,46 @@ class Pzhan(object):
         log.info("Works getting complete.")
 
     def get_dpc(self, zip_url, path, referer):
-        option_header = {
-        'User-Agent': self.User_Agent,
-        'Accept-Encoding': 'gzip, deflate',
-        'Access-Control-Request-Method': 'GET',
-        'Access-Control-Request-Headers': 'range'
+        options_header = {
+            'User-Agent': self.User_Agent,
+            'Accept-Encoding': 'gzip, deflate',
+            'Access-Control-Request-Method': 'GET',
+            'Access-Control-Request-Headers': 'range'
         }
 
         get_header = {
-        'User-Agent': self.User_Agent,
-        'Referer': referer,
-        'Connection': 'keep-alive'
+            'User-Agent': self.User_Agent,
+            'Referer': referer,
+            'Connection': 'keep-alive'
         }
 
-        req = rq.options(zip_url, headers=option_header)
+        req = rq.options(zip_url, headers=options_header)
         if not req.ok:
             log.error("Getting zip fail.")
+            log.debug("Fail at OPTIONS")
             return False
+        req.close()
 
-        request = ul2.Request(zip_url, headers=get_header)
-        response = self.opener.open(request)
-        abc = response.getcode()
-
-        if abc == 200:
-            zip_file = path + ".zip"
-            log.info("Downloading %s" % zip_file)
-            data = response.read()
-            with open(zip_file, "wb") as f:
-                f.write(data)
-
-            log.debug("Unziping %s..." % zip_file)
-            self.mkdir(path)
-            dpc_zip = zf.ZipFile(zip_file, "r")
-            for fn in dpc_zip.namelist():
-                file(path + "/" + fn, "wb").write(dpc_zip.read(fn))
-            os.remove(zip_file)
-            log.info("Flames of %s has all unzipped." % zip_file)
-            return True
-        else:
+        req = rq.get(zip_url, headers=get_header)
+        if not req.ok:
+            log.error("Getting zip fail.")
+            log.debug("Fail at GET")
             return False
+        zip_file = path + ".zip"
+        log.info("Downloading %s" % zip_file)
+        with open(zip_file, "wb") as f:
+            f.write(req.content)
+
+        log.debug("Unziping %s..." % zip_file)
+        self.mkdir(path)
+
+        dpc_zip = zf.ZipFile(zip_file, "r")
+        for fn in dpc_zip.namelist():
+            file(path + "/" + fn, "wb").write(dpc_zip.read(fn))
+
+        os.remove(zip_file)
+        log.info("Flames of %s has all unzipped." % zip_file)
+
+        return True
+
 
