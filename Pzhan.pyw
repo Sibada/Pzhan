@@ -248,6 +248,7 @@ class Thread(QThread):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon("imgs/icon.png"))
     pz = Pzhan()
     mw = MainWindow(pzhan=pz)
     sys.exit(app.exec_())
