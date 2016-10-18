@@ -27,6 +27,9 @@ class MainWindow(QMainWindow):
         self.remem_psw = QCheckBox('Remember Password')
         self.remem_psw.setChecked(True)
 
+        self.cre_gif = QCheckBox('Create GIF file')
+        self.cre_gif.setChecked(True)
+
         self.save_path_le = QLineEdit("")
         self.save_path_btn = QPushButton("Set save path")
 
@@ -65,6 +68,10 @@ class MainWindow(QMainWindow):
         save_path_row.addWidget(self.save_path_le)
         save_path_row.addWidget(self.save_path_btn)
 
+        option_row = QHBoxLayout()
+        option_row.addWidget(self.cre_gif)
+        option_row.addStretch(1)
+
         add_work_row = QHBoxLayout()
         add_work_row.addWidget(self.new_work)
         add_work_row.addWidget(self.add_work_btn)
@@ -79,6 +86,7 @@ class MainWindow(QMainWindow):
         v_box = QVBoxLayout()
         v_box.addLayout(login_row)
         v_box.addLayout(save_path_row)
+        v_box.addLayout(option_row)
         v_box.addWidget(self.work_list)
         v_box.addLayout(add_work_row)
         v_box.addLayout(start_row)
@@ -175,6 +183,11 @@ class MainWindow(QMainWindow):
         self.pz.set_save_path(unicode(self.save_path_le.text()))
 
     def start_works(self):
+        if self.cre_gif.isChecked():
+            self.pz.create_gif = True
+        else:
+            self.pz.create_gif = False
+
         if not pz.logined:
             self.msg_tst.setText("Please login.")
             return

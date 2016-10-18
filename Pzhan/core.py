@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 
 from . import log
+from .utils import create_gif
 import re
 import os
 import time
+import json
 import zipfile as zf
 import urllib as ul
 import urllib2 as ul2
@@ -42,7 +44,8 @@ class Pzhan(object):
         self.logined = False
 
         self.save_path = "~"
-        self.save_prefix = "N"  # N: None, T: Time, S: Series number.
+        self.save_prefix = "S"  # N: None, T: Time, S: Series number.
+        self.create_gif = True
 
         self.pg_css = ["div.works_display", "a.multiple", "img.original-image", "canvas"]
         self.title_css = ["div.layout-a", "h1.title"]
@@ -56,21 +59,20 @@ class Pzhan(object):
         self.cookie_handler = ul2.HTTPCookieProcessor(self.cookie)
         self.opener = ul2.build_opener(self.cookie_handler)
         try:
+            # request = rq.post(self.login_url, self.post_data, headers=self.login_header)
+            # request.raise_for_status()
             request = ul2.Request(self.login_url, self.post_data, self.login_header)
             response = self.opener.open(request)
             abc = response.getcode()
         except Exception:
+            log.error("Login failed.")
             return False
 
-        if abc == 200:
-            log.info("Response %d: login succeed." % abc)
-            self.pid = pid
-            self.psw = psw
-            self.logined = True
-            return True
-        else:
-            log.error("Response %d: login failed." % abc)
-            return False
+        log.info("Login succeed.")
+        self.pid = pid
+        self.psw = psw
+        self.logined = True
+        return True
 
     def set_save_path(self, save_path):
         has_path = os.path.exists(save_path)
@@ -144,27 +146,37 @@ class Pzhan(object):
         if pfx is None:
             prefix = ""
         elif self.save_prefix == "S":
-            prefix = "%04d" % pfx
+            prefix = "%04d " % pfx
         elif self.save_path == "T":
-            prefix = self.get_time()
+            prefix = self.get_time() + " "
 
         pg_html = self.get_html(pg_url)
         pg_soup = bs(pg_html, "lxml")
         title = pg_soup.select(self.title_css[0])[0].select(self.title_css[1])[0].text
         title = re.sub("[\\/\?\*\"<>]", " ", title)
-        title = prefix + " " + title
+        title = prefix + title
         save_path = self.save_path + "/" + title
 
-        zip_inc_t = re.findall("pixiv.context.ugokuIllustFullscreenData\s*=\s*\{\"src\"\:\".+\.zip\"", pg_html)
+        dpg_info_t = re.findall(r"pixiv\.context\.ugokuIllustFullscreenData\s*=\s*\{.+\}", pg_html)
         works_dis = pg_soup.select(self.pg_css[0])[0].select(self.pg_css[1])
 
-        if len(zip_inc_t) > 0:
-            zip_inc = zip_inc_t[0]
-            zip_url = re.findall("http\:.*\.zip", zip_inc)[0]
-            zip_url = re.sub("\\\\", "", zip_url)
+        if len(dpg_info_t) > 0:
+            dpg_info = dpg_info_t[0]
+            dpg_info = re.findall(r"\{.+\}", dpg_info)[0]
+            dpg_info = json.loads(dpg_info)
+
+            zip_url = re.sub("\\\\", "", dpg_info["src"])
+            delays = [frame["delay"] for frame in dpg_info["frames"]]
+            files = [frame["file"] for frame in dpg_info["frames"]]
 
             log.info("\"%s\" is a dynamic pic." % (title))
             self.get_dpc(zip_url, save_path, pg_url)
+
+            # Create GIF file.
+            if self.create_gif:
+                log.info("Creating GIF file...")
+                create_gif(save_path, files, delays)
+                log.info("GIF file created.")
 
         elif len(works_dis) == 0:
             img_src = pg_soup.select(self.pg_css[2])[0].attrs["data-src"]
@@ -282,5 +294,4 @@ class Pzhan(object):
         log.info("Flames of %s has all unzipped." % zip_file)
 
         return True
-
 
