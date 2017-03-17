@@ -93,11 +93,9 @@ class MainWindow(QMainWindow):
         v_box.addWidget(self.console)
         v_box.addWidget(self.msg_tst)
 
-        # self.setLayout(v_box)
         self.resize(QSize(600, 650))
         self.setWindowTitle("Pzhan")
 
-        # self.setWindowFlags(Qt.WindowCloseButtonHint)
         widget = QWidget(self)
         widget.setLayout(v_box)
         self.setCentralWidget(widget)

@@ -8,33 +8,33 @@ import os
 import time
 import json
 import zipfile as zf
-import urllib as ul
-import urllib2 as ul2
 import requests as rq
-import cookielib as cl
 from bs4 import BeautifulSoup as bs
 
-
 class Pzhan(object):
-    def __init__(self):
+    def __init__(self, save_path = None):
+        self.ses = rq.session()    
+        
         self.base_url = "http://www.pixiv.net/"
-        self.login_url = "https://www.pixiv.net/login.php"
+        self.login_base_url = 'https://accounts.pixiv.net/login?lang=zh&source=pc&view_type=page&ref=wwwtop_accounts_index'
+        self.login_url = "https://accounts.pixiv.net/api/login?lang=zh"
         self.User_Agent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:44.0) Gecko/20100101 Firefox/44.0"
         self.pid = None
         self.psw = None
+        self.post_key = None
+        
         self.login_header = {
-            "Host": "www.pixiv.net",
+            "Host": "accounts.pixiv.net",
             "User-Agent": self.User_Agent,
-            "Referer": "http://www.pixiv.net/",
+            "Referer": "https://accounts.pixiv.net/login?lang=zh&source=pc&view_type=page&ref=wwwtop_accounts_index",
             "Content-Type": "application/x-www-form-urlencoded",
             "Connection": "keep-alive"
         }
         self.post_content = {
-            "mode": "login",  
             "pixiv_id": None,  
-            "pass": None,  
-            "skip": "1",
-            "return_to": "/",  
+            "password": None,
+            "post_key": None,
+            "return_to": self.base_url,  
         }
         self.post_data = None
         self.cookie = None
@@ -44,6 +44,8 @@ class Pzhan(object):
         self.logined = False
 
         self.save_path = "~"
+        if save_path is not None:
+            self.save_path = save_path
         self.save_prefix = "S"  # N: None, T: Time, S: Series number.
         self.create_gif = True
 
@@ -52,19 +54,20 @@ class Pzhan(object):
         self.pgsl_css = ["div.item-container", "a.full-size-container"]
 
     def login(self, pid, psw):
+        login_html = self.ses.get(self.login_base_url)
+        pattern = re.compile('<input type="hidden".*?value="(.*?)">', re.S)  
+        result = re.search(pattern, login_html.text)  
+        self.post_key = result.group(1)
+        
         self.post_content["pixiv_id"] = pid
-        self.post_content["pass"] = psw
-        self.post_data = ul.urlencode(self.post_content)
-        self.cookie = cl.LWPCookieJar()
-        self.cookie_handler = ul2.HTTPCookieProcessor(self.cookie)
-        self.opener = ul2.build_opener(self.cookie_handler)
-        try:
-            # request = rq.post(self.login_url, self.post_data, headers=self.login_header)
-            # request.raise_for_status()
-            request = ul2.Request(self.login_url, self.post_data, self.login_header)
-            response = self.opener.open(request)
-            abc = response.getcode()
-        except Exception:
+        self.post_content["password"] = psw
+        self.post_content["post_key"] = self.post_key
+        self.ses.post(self.login_url, data = self.post_content, headers = self.login_header)
+        
+        tst_html = self.ses.get(self.base_url).text
+        prodiv = tst_html.find("my-profile-unit")
+        
+        if prodiv < 0:
             log.error("Login failed.")
             return False
 
@@ -73,6 +76,7 @@ class Pzhan(object):
         self.psw = psw
         self.logined = True
         return True
+
 
     def set_save_path(self, save_path):
         has_path = os.path.exists(save_path)
@@ -86,12 +90,12 @@ class Pzhan(object):
         self.save_path = save_path
 
     def get_html(self, url):
-        request = ul2.Request(url)
-        response = self.opener.open(request)
-        abc = response.getcode()
-        log.debug("Get html: response %d" % abc)
+        response = self.ses.get(url)
+        
+        sc = response.status_code
+        log.debug("Get html: response %d" % sc)
 
-        html = response.read().decode('UTF-8')
+        html = response.content.decode('UTF-8')
         return html
 
     def mkdir(self, dir):
@@ -109,14 +113,13 @@ class Pzhan(object):
             'Referer': referer,
             'User-Agent': self.User_Agent
         }
-        request = ul2.Request(img_url, headers=img_header)
-        response = self.opener.open(request)
-        abc = response.getcode()
-        log.debug("Save_img: response %d" % abc)
-        if abc == 200:
-            data = response.read()
+        response = self.ses.get(img_url, headers = img_header)
+        sc = response.status_code
+        log.debug("Save_img: response %d" % sc)
+        
+        if sc == 200:
             with open(path, "wb") as f:
-                f.write(data)
+                    f.write(response.content)        
             return True
         else:
             return False
@@ -266,17 +269,17 @@ class Pzhan(object):
             'Connection': 'keep-alive'
         }
 
-        req = rq.options(zip_url, headers=options_header)
+        req = self.ses.options(zip_url, headers=options_header)
         if not req.ok:
             log.error("Getting zip fail.")
-            log.debug("Fail at OPTIONS")
+            log.debug("Fail in OPTIONS")
             return False
         req.close()
 
-        req = rq.get(zip_url, headers=get_header)
+        req = self.ses.get(zip_url, headers=get_header)
         if not req.ok:
             log.error("Getting zip fail.")
-            log.debug("Fail at GET")
+            log.debug("Fail in GET")
             return False
         zip_file = path + ".zip"
         log.info("Downloading %s" % zip_file)
