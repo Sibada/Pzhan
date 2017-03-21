@@ -153,15 +153,16 @@ class MainWindow(QMainWindow):
         self.console.ensureCursorVisible()
 
     def login(self):
-        pid = self.pid_le.text()
-        psw = self.psw_le.text()
+        pid = unicode(self.pid_le.text())
+        psw = unicode(self.psw_le.text())
         is_login = self.pz.login(pid, psw)
+
         if is_login:
             QMessageBox.about(self, "msg", "Login succeed.")
             self.is_login.setText(self.pz.pid)
         else:
             QMessageBox.about(self, "msg", "Login fail.")
-
+	
     def add_work(self):
         if self.new_work.text() == "":
             self.msg_tst.setText("Url could not be empty.")
