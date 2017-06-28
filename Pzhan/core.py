@@ -63,12 +63,12 @@ class Pzhan(object):
         self.post_content["password"] = psw
         self.post_content["post_key"] = self.post_key
         self.ses.post(self.login_url, data = self.post_content, headers = self.login_header)
-        
+
         tst_html = self.ses.get(self.base_url).text
-        prodiv = tst_html.find("my-profile-unit")
+        prodiv = tst_html.find("user-name-container")
         
         if prodiv < 0:
-            log.error("Login failed.")
+            log.error(self.pid)
             return False
 
         log.info("Login succeed.")
@@ -219,17 +219,27 @@ class Pzhan(object):
                 subpg_url = member_url + "&p=%d" % p
             else:
                 subpg_url = member_url
-            subpg_soup = bs(self.get_html(subpg_url), "lxml")
+
+            for i in range(10):
+                try:
+                    subpg_html = self.get_html(subpg_url)
+                    break
+                except Exception:
+                    log.info('Re try...')
+
+            subpg_soup = bs(subpg_html, "lxml")
 
             item_list = subpg_soup.select("li.image-item")
             if len(item_list) == 0:
                 break
+            item_list = item_list[::-1]
 
             for item in item_list:
                 item_url = item.select("a")[0].attrs["href"]
                 item_url = self.base_url + item_url
                 url_list.append(item_url)
 
+            log.info("Up to %d works." % len(url_list))
             p += 1
             url_list = url_list[::-1]
         log.info("Member \"%s\" has total %d works." % (member_name, len(url_list)))
@@ -238,20 +248,28 @@ class Pzhan(object):
 
     def get_member_works(self, member_url):
         works_list, member_name = self.get_member_works_urls(member_url)
+        ori_list = works_list[:]
+        fail_list = []
 
         log.info("Start to get works of \"%s\"." % member_name)
         pre_path = self.save_path
         self.save_path += "/" + member_name
         self.mkdir(self.save_path)
 
-        for work_url in works_list:
-            log.info("Getting work %d/%d" % (works_list.index(work_url)+1, len(works_list)))
-            try:
-                self.get_pg(work_url, (works_list.index(work_url)+1))
-            except Exception:
-                log.error("Work %d/%d fail." % (works_list.index(work_url)+1, len(works_list)))
-
-
+        for i in range(6):
+            for work_url in works_list:
+                log.info("Getting work %d/%d" % (works_list.index(work_url)+1, len(works_list)))
+                try:
+                    self.get_pg(work_url, (ori_list.index(work_url)+1))
+                except Exception:
+                    log.error("Work %d/%d fail." % (works_list.index(work_url)+1, len(works_list)))
+                    fail_list.append(work_url)
+                    log.info("Total fail: %d" % len(fail_list))
+            works_list = fail_list[:]
+            fail_list = []
+        
+        for fail_url in works_list:
+            log.info("Fail %s" % fail_url)
         self.save_path = pre_path
         log.info("Works getting complete.")
 
